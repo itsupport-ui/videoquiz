@@ -1,0 +1,81 @@
+"use client";
+import { signIn } from "next-auth/react";
+import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+
+export default function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const sp = useSearchParams();
+  const err = sp.get("error");
+  let errMsg: string | null = null;
+  if (err === "CredentialsSignin") {
+    errMsg = "Sign-in failed. Check email/password. Please ensure your email is verified or reset your password if locked.";
+  } else if (err) {
+    errMsg = "Sign-in error. Please try again.";
+  }
+
+  const handleLogin = async () => {
+    const body = { 
+      email, 
+      password, 
+      callbackUrl:"/" 
+    };
+    await signIn("credentials", body);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleLogin();
+    }
+  };
+  return (
+    <main 
+      className="min-h-screen h-screen grid place-items-center px-4 fixed inset-0 overflow-auto" 
+      style={{
+        backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)), url(/login-bg.jpg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      }}
+    >
+      <div className="w-full max-w-md">
+      <div className="text-center bg-white/90 backdrop-blur-sm rounded-lg px-4 py-3 mb-4 shadow-lg">
+        <div className="text-[color:var(--color-brand)] font-semibold text-lg">Ayurvedaone Pvt Ltd</div>
+        <div className="text-slate-700 text-sm">Training Portal</div>
+      </div>
+      <h1 className="text-2xl font-semibold mt-4 mb-4 text-white text-center drop-shadow-lg">Login</h1>
+      {errMsg && (
+        <div className="mb-3 rounded border border-red-300 bg-red-50/95 backdrop-blur-sm text-red-900 px-3 py-2 text-sm shadow-md">
+          {errMsg}
+        </div>
+      )}
+      <div className="rounded border border-slate-200 bg-white/95 backdrop-blur-sm p-6 shadow-xl">
+        <div className="grid gap-3 text-center">
+          <input 
+            className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-brand)]" 
+            placeholder="email" 
+            value={email} 
+            onChange={e=>setEmail(e.target.value)} 
+            onKeyPress={handleKeyPress}
+          />
+          <input 
+            className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-brand)]" 
+            placeholder="password" 
+            type="password" 
+            value={password} 
+            onChange={e=>setPassword(e.target.value)} 
+            onKeyPress={handleKeyPress}
+          />
+          <button className="rounded bg-[color:var(--color-brand)] text-white px-3 py-2 text-sm hover:opacity-95" onClick={handleLogin}>Sign In</button>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-4 text-sm justify-center">
+          <a className="underline" href="/forgot">Forgot password?</a>
+          <a className="underline" href="#" onClick={async (e)=>{ e.preventDefault(); if(!email) return alert('Enter email above to resend'); try { await fetch('/api/auth/verify/resend', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email }) }); alert('If that email exists, a verification link was sent.'); } catch {} }}>Resend verification</a>
+        </div>
+      </div>
+      </div>
+    </main>
+  );
+}
+

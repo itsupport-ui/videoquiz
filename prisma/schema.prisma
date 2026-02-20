@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String                       @id @default(cuid())
+  email                String                       @unique
+  name                 String
+  role                 Role                         @default(EMPLOYEE)
+  passwordHash         String
+  emailVerifiedAt      DateTime?
+  mfaSecret            String?
+  disabledAt           DateTime?
+  lockedUntil          DateTime?
+  lastLoginAt          DateTime?
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+  attempts             Attempt[]
+  certificates         Certificate[]
+  mainModuleProgresses EmployeeMainModuleProgress[]
+  questionImports      QuestionImport[]
+}
+
+model Module {
+  id              String      @id @default(cuid())
+  order           Int         @unique
+  title           String
+  description     String?
+  youtubeId       String
+  published       Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  mainModuleId    Int?
+  orderWithinMain Int?
+  mainModule      MainModule? @relation(fields: [mainModuleId], references: [id])
+  quiz            Quiz?
+}
+
+model Quiz {
+  id               String     @id @default(cuid())
+  moduleId         String     @unique
+  passScore        Int
+  timeLimitSeconds Int        @default(300)
+  attempts         Attempt[]
+  questions        Question[]
+  module           Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+}
+
+model Question {
+  id            String   @id @default(cuid())
+  quizId        String
+  text          String
+  options       String[]
+  correctIndex  Int
+  active        Boolean  @default(true)
+  correctAnswer String?
+  optionA       String?
+  optionB       String?
+  optionC       String?
+  optionD       String?
+  orderIndex    Int?
+  questionType  String?
+  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+}
+
+model Attempt {
+  id          String   @id @default(cuid())
+  userId      String
+  quizId      String
+  attemptNo   Int
+  score       Int
+  passed      Boolean
+  answersJson Json
+  submittedAt DateTime @default(now())
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, quizId, attemptNo])
+}
+
+model Certificate {
+  id           String      @id @default(cuid())
+  userId       String
+  issuedAt     DateTime    @default(now())
+  totalScore   Int
+  filePath     String
+  mainModuleId Int?
+  mainModule   MainModule? @relation(fields: [mainModuleId], references: [id])
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mainModuleId])
+  @@index([userId])
+  @@index([mainModuleId])
+}
+
+model MainModule {
+  id                  Int                          @id @default(autoincrement())
+  title               String
+  description         String?
+  youtubeId           String
+  isActive            Boolean                      @default(true)
+  createdDate         DateTime                     @default(now())
+  certificateTemplate String?
+  orderIndex          Int
+  certificates        Certificate[]
+  progresses          EmployeeMainModuleProgress[]
+  subModules          Module[]
+}
+
+model QuestionImport {
+  id                Int      @id @default(autoincrement())
+  uploadedById      String
+  fileName          String
+  uploadDate        DateTime @default(now())
+  totalQuestions    Int
+  successfulImports Int
+  failedImports     Int
+  errorLog          String?
+  uploadedBy        User     @relation(fields: [uploadedById], references: [id])
+}
+
+model EmployeeMainModuleProgress {
+  id                    Int        @id @default(autoincrement())
+  employeeId            String
+  mainModuleId          Int
+  currentSubmoduleIndex Int        @default(0)
+  isCompleted           Boolean    @default(false)
+  completionDate        DateTime?
+  employee              User       @relation(fields: [employeeId], references: [id])
+  mainModule            MainModule @relation(fields: [mainModuleId], references: [id])
+
+  @@unique([employeeId, mainModuleId])
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
