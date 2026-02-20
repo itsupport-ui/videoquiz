@@ -38,27 +38,20 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
+
+# local server scripts / temp files
+fix_env.py
+tmp_*.txt
+*.zip
+*.bak
+
+# generated certificates (PDFs)
+/public/certificates/*.pdf
+/public/certificates/*.png
 
 # database backups
 /backups/
 
-# generated certificates (PDFs)
-/public/certificates/
-
-# local backend data (tokens, profiles)
+# backend runtime data (auth tokens, profile cache)
 /backend/data/
-
-# local helper scripts
-fix_env.py
-nginx_duckdns_ssl.conf
-nginx_videoquiz.conf
-tmp_copy.txt
-tmp_q.txt
-
-# compiled output
-/dist/
-
-# backup files
-*.bak
-*.zip
+next-env.d.ts
