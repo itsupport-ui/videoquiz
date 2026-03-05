@@ -22,13 +22,19 @@ export async function POST(req: Request) {
   if (!eligible) return NextResponse.json({ message: "User not eligible" }, { status: 400 });
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
-  const score = await computeUserOverallScore(userId);
-  const filePath = await generateCertificatePdf({ userName: user.name || user.email, userEmail: user.email, overallScore: score });
-  await (prisma as any).certificate.upsert({
-    where: { userId_mainModuleId: { userId, mainModuleId: null } },
-    update: { filePath, totalScore: score, issuedAt: new Date() },
-    create: { userId, mainModuleId: null, filePath, totalScore: score },
-  });
-  return NextResponse.json({ url: `/api/certificate/download?userId=${encodeURIComponent(userId)}` });
+  try {
+    const score = await computeUserOverallScore(userId);
+    const filePath = await generateCertificatePdf({ userName: user.name || user.email, userEmail: user.email, overallScore: score });
+    const existing = await (prisma as any).certificate.findFirst({ where: { userId, mainModuleId: null } });
+    if (existing) {
+      await (prisma as any).certificate.update({ where: { id: existing.id }, data: { filePath, totalScore: score, issuedAt: new Date() } });
+    } else {
+      await (prisma as any).certificate.create({ data: { userId, mainModuleId: null, filePath, totalScore: score } });
+    }
+    return NextResponse.json({ url: `/api/certificate/download?userId=${encodeURIComponent(userId)}` });
+  } catch (err) {
+    console.error("[reissue/POST]", err);
+    return NextResponse.json({ message: err instanceof Error ? err.message : "Certificate generation failed" }, { status: 500 });
+  }
 }
 

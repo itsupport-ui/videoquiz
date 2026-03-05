@@ -155,7 +155,7 @@ export async function getMainModuleProgress(userId: string): Promise<MainModuleP
   for (const [quizId, arr] of attemptsByQuiz.entries()) {
     bestByQuiz.set(quizId, {
       attemptsUsed: arr.length,
-      lastScore: arr[0]?.score ?? null,
+      lastScore: arr[arr.length - 1]?.score ?? null,  // arr is sorted asc — last element is most recent
       passed: arr.some((x) => !!x.passed),
     });
   }

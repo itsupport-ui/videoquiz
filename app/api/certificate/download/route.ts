@@ -18,19 +18,24 @@ async function ensureFileForUser(userId: string): Promise<string | null> {
   // Regenerate if eligible but file missing
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return null;
-  const overallScore = await computeUserOverallScore(userId);
-  const filePath = await generateCertificatePdf({
-    userName: user.name || user.email,
-    userEmail: user.email,
-    overallScore,
-    contextTitle: "All Main Modules",
-  });
-  await (prisma as any).certificate.upsert({
-    where: { userId_mainModuleId: { userId, mainModuleId: null } },
-    update: { filePath, totalScore: overallScore, issuedAt: new Date() },
-    create: { userId, mainModuleId: null, filePath, totalScore: overallScore },
-  });
-  return filePath;
+  try {
+    const overallScore = await computeUserOverallScore(userId);
+    const filePath = await generateCertificatePdf({
+      userName: user.name || user.email,
+      userEmail: user.email,
+      overallScore,
+      contextTitle: "All Main Modules",
+    });
+    if (cert) {
+      await (prisma as any).certificate.update({ where: { id: cert.id }, data: { filePath, totalScore: overallScore, issuedAt: new Date() } });
+    } else {
+      await (prisma as any).certificate.create({ data: { userId, mainModuleId: null, filePath, totalScore: overallScore } });
+    }
+    return filePath;
+  } catch (err) {
+    console.error("[certificate/download ensureFileForUser]", err);
+    return null;
+  }
 }
 
 export async function GET(req: Request) {
