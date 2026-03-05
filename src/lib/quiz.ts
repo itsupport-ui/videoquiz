@@ -282,3 +282,14 @@ export async function computeUserOverallScore(userId: string): Promise<number> {
   }
   return count ? Math.round(sum / count) : 0;
 }
+
+/** Returns the date when the user last passed any quiz — i.e. their training completion date.
+ *  Falls back to now() if no passing attempt is found (safety guard). */
+export async function getUserCompletionDate(userId: string): Promise<Date> {
+  const last = await prisma.attempt.findFirst({
+    where: { userId, passed: true },
+    orderBy: { submittedAt: "desc" },
+    select: { submittedAt: true },
+  });
+  return last?.submittedAt ?? new Date();
+}

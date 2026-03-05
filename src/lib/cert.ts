@@ -33,12 +33,14 @@ export async function generateCertificatePdf({
   overallScore,
   fileName,
   contextTitle,
+  completionDate,
 }: {
   userName: string;
   userEmail: string;
   overallScore: number;
   fileName?: string;
   contextTitle?: string;
+  completionDate?: Date;
 }) {
   const dir = ensureCertificatesDir();
   const safe = userEmail.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -67,7 +69,7 @@ export async function generateCertificatePdf({
   const color = rgb(0.17, 0.16, 0.14); // Dark brown #2C2825
 
   const participantName = userName || userEmail;
-  const completionDate  = formatCertificateDate(new Date());
+  const certDate = formatCertificateDate(completionDate ?? new Date());
 
   //  Participant Name 
   // Sits centered in the blank space between "This certificate is awarded to :"
@@ -101,7 +103,7 @@ export async function generateCertificatePdf({
   const dateX     = bodyLeftX + font.widthOfTextAtSize(prefix, dateSize);
   const dateY     = 242;
 
-  page.drawText(completionDate, { x: dateX, y: dateY, size: dateSize, font, color });
+  page.drawText(certDate, { x: dateX, y: dateY, size: dateSize, font, color });
 
   const bytes = await pdfDoc.save();
   fs.writeFileSync(filePath, Buffer.from(bytes));

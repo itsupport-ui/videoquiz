@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateCertificatePdf } from "@/lib/cert";
-import { isUserEligible, computeUserOverallScore } from "@/lib/quiz";
+import { isUserEligible, computeUserOverallScore, getUserCompletionDate } from "@/lib/quiz";
 import path from "path";
 import fs from "fs";
 
@@ -20,11 +20,13 @@ async function ensureFileForUser(userId: string): Promise<string | null> {
   if (!user) return null;
   try {
     const overallScore = await computeUserOverallScore(userId);
+    const completionDate = await getUserCompletionDate(userId);
     const filePath = await generateCertificatePdf({
       userName: user.name || user.email,
       userEmail: user.email,
       overallScore,
       contextTitle: "All Main Modules",
+      completionDate,
     });
     if (cert) {
       await (prisma as any).certificate.update({ where: { id: cert.id }, data: { filePath, totalScore: overallScore, issuedAt: new Date() } });

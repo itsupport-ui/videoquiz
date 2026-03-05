@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateCertificatePdf } from "@/lib/cert";
-import { isUserEligible, computeUserOverallScore } from "@/lib/quiz";
+import { isUserEligible, computeUserOverallScore, getUserCompletionDate } from "@/lib/quiz";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,11 +32,13 @@ export async function POST() {
   try {
     const userId = session.user.id as string;
     const overallScore = await computeUserOverallScore(userId);
+    const completionDate = await getUserCompletionDate(userId);
     const filePath = await generateCertificatePdf({
       userName: session.user.name || "User",
       userEmail: session.user.email || userId,
       overallScore,
       contextTitle: "All Main Modules Completed",
+      completionDate,
     });
     const existing = await (prisma as any).certificate.findFirst({ where: { userId, mainModuleId: null } });
     if (existing) {
