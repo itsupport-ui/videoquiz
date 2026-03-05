@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function TrophyIcon() {
   return (
@@ -18,6 +18,8 @@ export default function CertificatePanel() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{ eligible?: boolean; url?: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const hasTriedGenerate = useRef(false);
 
   async function load() {
     setLoading(true);
@@ -26,9 +28,9 @@ export default function CertificatePanel() {
       const res = await fetch(`/api/certificate`, { cache: "no-store" });
       const json = await res.json();
       setData(json);
-      
-      // Auto-generate certificate if eligible but not yet generated
-      if (json.eligible && !json.url) {
+      // Auto-generate once if eligible but cert not yet created
+      if (json.eligible && !json.url && !hasTriedGenerate.current) {
+        hasTriedGenerate.current = true;
         await generate();
       }
     } catch {
@@ -41,6 +43,7 @@ export default function CertificatePanel() {
   useEffect(() => { load(); }, []);
 
   async function generate() {
+    setGenerating(true);
     setMessage(null);
     try {
       const res = await fetch(`/api/certificate`, { method: "POST" });
@@ -49,9 +52,14 @@ export default function CertificatePanel() {
         setMessage(j.message || "Generate failed");
         return;
       }
-      await load();
+      // Reload to get fresh url
+      const check = await fetch(`/api/certificate`, { cache: "no-store" });
+      const json = await check.json();
+      setData(json);
     } catch {
       setMessage("Generate failed");
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -61,7 +69,10 @@ export default function CertificatePanel() {
   return (
     <div className="grid gap-3">
       {message && (
-        <div className="text-red-800 bg-red-50 border border-red-300 rounded px-3 py-2 text-sm">{message}</div>
+        <div className="text-red-800 bg-red-50 border border-red-300 rounded px-3 py-2 text-sm flex items-center gap-2">
+          <span>{message}</span>
+          <button className="ml-auto text-xs underline" onClick={() => { hasTriedGenerate.current = false; load(); }}>Retry</button>
+        </div>
       )}
 
       {data.url ? (
@@ -88,10 +99,24 @@ export default function CertificatePanel() {
         <div className="flex items-start gap-3">
           <div className="mt-0.5 text-emerald-700"><TrophyIcon /></div>
           <div>
-            <p className="text-slate-900">Generating your certificate...</p>
-            <div className="mt-3">
-              <div className="animate-pulse rounded bg-slate-300 w-36 h-9"></div>
-            </div>
+            {generating ? (
+              <>
+                <p className="text-slate-900">Generating your certificate…</p>
+                <div className="mt-3"><div className="animate-pulse rounded bg-slate-300 w-36 h-9" /></div>
+              </>
+            ) : (
+              <>
+                <p className="text-slate-900">Your certificate is ready to generate.</p>
+                <div className="mt-3">
+                  <button
+                    onClick={() => generate()}
+                    className="inline-flex items-center gap-2 rounded bg-[color:var(--color-brand)] text-white !text-white px-3 py-2 text-sm hover:opacity-95"
+                  >
+                    Generate Certificate
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       ) : (

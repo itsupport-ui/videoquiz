@@ -1,4 +1,3 @@
-import { be } from "zod/locales";
 import { prisma } from "./prisma";
 
 export type ModuleStatus = "LOCKED" | "PENDING" | "PASSED" | "FAILED";
@@ -246,4 +245,40 @@ export async function getMainModuleProgress(userId: string): Promise<MainModuleP
     previousGroupCompleted = previousGroupCompleted && (allPassed || list.length === 0);
   }
   return result;
+}
+
+/**
+ * Single source-of-truth eligibility check.
+ * Uses main-module completion when main modules exist; falls back to direct quiz passes.
+ */
+export async function isUserEligible(userId: string): Promise<boolean> {
+  const progress = await getMainModuleProgress(userId);
+  if (progress.length > 0) {
+    return progress.every((m) => m.completed);
+  }
+  // Legacy fallback: no main modules at all
+  const modules = await prisma.module.findMany({ include: { quiz: true } });
+  if (modules.length === 0) return false;
+  const attempts = await prisma.attempt.findMany({ where: { userId }, select: { quizId: true, passed: true } });
+  const passedIds = new Set(attempts.filter((a) => a.passed).map((a) => a.quizId));
+  return modules.every((m: any) => m.quiz && passedIds.has(m.quiz.id));
+}
+
+/**
+ * Single source-of-truth overall score computation.
+ */
+export async function computeUserOverallScore(userId: string): Promise<number> {
+  const progress = await getMainModuleProgress(userId);
+  if (progress.length > 0) {
+    const total = progress.reduce((sum, m) => sum + m.averageForCertificate, 0);
+    return Math.round(total / progress.length);
+  }
+  const modules = await prisma.module.findMany({ include: { quiz: true } });
+  let sum = 0, count = 0;
+  for (const m of modules) {
+    if (!(m as any).quiz) continue;
+    const best = await prisma.attempt.findFirst({ where: { userId, quizId: (m as any).quiz.id }, orderBy: { score: "desc" } });
+    if (best) { sum += best.score; count++; }
+  }
+  return count ? Math.round(sum / count) : 0;
 }

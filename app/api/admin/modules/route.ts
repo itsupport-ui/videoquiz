@@ -10,34 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== "ADMIN") return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-  // Ensure every module has a quiz (covers records added via Prisma Studio)
-  type ModuleWithQuiz = { id: string; order: number; youtubeId: string; quiz: { id: string } | null };
-  let modulesWithQuiz: ModuleWithQuiz[] = await prisma.module.findMany({ orderBy: { order: "asc" }, include: { quiz: true } });
-  // Normalize YouTube IDs if stored as full URLs via Prisma Studio
-  for (const m of modulesWithQuiz) {
-    const id = extractYouTubeId(m.youtubeId);
-    if (id !== m.youtubeId) {
-      await prisma.module.update({ where: { id: m.id }, data: { youtubeId: id } });
-    }
-  }
-  modulesWithQuiz = await prisma.module.findMany({ orderBy: { order: "asc" }, include: { quiz: true } });
-  // Self-heal ordering if there are gaps/duplicates
-  let needsReindex = false;
-  for (let i = 0; i < modulesWithQuiz.length; i++) {
-    if (modulesWithQuiz[i].order !== i + 1) { needsReindex = true; break; }
-  }
-  if (needsReindex) {
-    for (let i = 0; i < modulesWithQuiz.length; i++) {
-      const m = modulesWithQuiz[i];
-      if (m.order !== i + 1) await prisma.module.update({ where: { id: m.id }, data: { order: i + 1 } });
-    }
-    modulesWithQuiz = await prisma.module.findMany({ orderBy: { order: "asc" }, include: { quiz: true } });
-  }
-  const missing = modulesWithQuiz.filter((m: ModuleWithQuiz) => !m.quiz);
-  for (const m of missing) {
-    await prisma.quiz.upsert({ where: { moduleId: m.id }, create: { moduleId: m.id, passScore: 70, timeLimitSeconds: 300 }, update: {} });
-  }
-  const modules = modulesWithQuiz.map(({ quiz, ...rest }) => rest);
+  const modules = await prisma.module.findMany({ orderBy: { order: "asc" } });
   return NextResponse.json({ modules });
 }
 

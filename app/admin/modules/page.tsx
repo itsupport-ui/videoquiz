@@ -1,147 +1,160 @@
-"use client";
-import { useEffect, useState } from "react";
+﻿"use client";
+import { useEffect, useRef, useState } from "react";
+import { Plus, Pencil, Trash2, Eye, EyeOff, GripVertical, X, Loader2, BookOpen, CheckCircle, EyeOff as Hidden } from "lucide-react";
 
-type Module = { id: string; order: number; title: string; description?: string | null; youtubeId: string; published: boolean };
+type Module = { id: string; order: number; title: string; description?: string|null; youtubeId: string; published: boolean };
+
+const INPUT = "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-brand)]";
 
 export default function AdminModules() {
-  const [mods, setMods] = useState<Module[]>([]);
+  const [mods, setMods]       = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [youtubeId, setYouTubeId] = useState("");
-  const [order, setOrder] = useState<number | "">("");
-  const [published, setPublished] = useState(true);
-  const [message, setMessage] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [eTitle, setETitle] = useState("");
-  const [eDescription, setEDescription] = useState("");
-  const [eYouTubeId, setEYouTubeId] = useState("");
-  const [eOrder, setEOrder] = useState<number>(1);
+  const [search, setSearch]   = useState("");
+  const [pubFilter, setPubFilter] = useState<"ALL"|"PUBLISHED"|"UNPUBLISHED">("ALL");
+  const [toast, setToast]     = useState<{msg:string;ok:boolean}|null>(null);
+  const toastTimer            = useRef<ReturnType<typeof setTimeout>|null>(null);
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [cTitle, setCTitle] = useState(""); const [cDesc, setCDesc] = useState("");
+  const [cYt, setCYt] = useState(""); const [cOrder, setCOrder] = useState<number|"">("");
+  const [cPub, setCPub] = useState(true); const [createBusy, setCreateBusy] = useState(false);
+
+  const [editTarget, setEditTarget] = useState<Module|null>(null);
+  const [eTitle, setETitle] = useState(""); const [eDesc, setEDesc] = useState("");
+  const [eYt, setEYt] = useState(""); const [eOrder, setEOrder] = useState<number>(1);
+  const [ePub, setEPub] = useState(true); const [editBusy, setEditBusy] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<Module|null>(null);
+  const [deleteBusy, setDeleteBusy]     = useState(false);
+
+  const [dragIdx, setDragIdx] = useState<number|null>(null);
+
+  function showToast(msg: string, ok = true) {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ msg, ok });
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+  }
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/admin/modules", { cache: "no-store" });
-    const data = await res.json();
-    setMods(data.modules);
-    setLoading(false);
+    try { const d = await fetch("/api/admin/modules",{cache:"no-store"}).then(r=>r.json()); setMods(d.modules||[]); }
+    finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
 
-  async function create(e: React.FormEvent) {
-    e.preventDefault(); setMessage(null);
-    const res = await fetch("/api/admin/modules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, description, youtubeId, order: order === "" ? undefined : Number(order), published }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) { setMessage(data.message || "Failed to create"); return; }
-    setTitle(""); setDescription(""); setYouTubeId(""); setOrder(""); setPublished(true);
-    load();
+  const filtered = mods.filter(m => {
+    if (search && !m.title.toLowerCase().includes(search.toLowerCase()) && !m.description?.toLowerCase().includes(search.toLowerCase())) return false;
+    if (pubFilter === "PUBLISHED" && !m.published) return false;
+    if (pubFilter === "UNPUBLISHED" && m.published) return false;
+    return true;
+  });
+  const totalPub   = mods.filter(m => m.published).length;
+  const totalUnpub = mods.filter(m => !m.published).length;
+
+  async function submitCreate(e: React.FormEvent) {
+    e.preventDefault(); setCreateBusy(true);
+    try {
+      const res = await fetch("/api/admin/modules",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:cTitle,description:cDesc,youtubeId:cYt,order:cOrder===""?undefined:Number(cOrder),published:cPub})});
+      const d = await res.json().catch(()=>({}));
+      if (!res.ok) { showToast(d.message||"Failed to create",false); return; }
+      showToast("Module created"); setCreateOpen(false);
+      setCTitle(""); setCDesc(""); setCYt(""); setCOrder(""); setCPub(true); load();
+    } finally { setCreateBusy(false); }
   }
 
-  async function update(id: string, patch: Partial<Module>) {
-    const res = await fetch(`/api/admin/modules/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
-    if (!res.ok) { setMessage("Update failed"); return; }
-    load();
+  function openEdit(m: Module) { setEditTarget(m); setETitle(m.title); setEDesc(m.description||""); setEYt(m.youtubeId); setEOrder(m.order); setEPub(m.published); }
+
+  async function submitEdit(e: React.FormEvent) {
+    e.preventDefault(); if (!editTarget) return; setEditBusy(true);
+    try {
+      const res = await fetch(`/api/admin/modules/${editTarget.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:eTitle,description:eDesc,youtubeId:eYt,order:eOrder,published:ePub})});
+      if (!res.ok) { showToast("Update failed",false); return; }
+      showToast("Module updated"); setEditTarget(null); load();
+    } finally { setEditBusy(false); }
   }
 
-  async function remove(id: string) {
-    if (!confirm("Delete this module? This will remove its quiz, questions and attempts.")) return;
-    const res = await fetch(`/api/admin/modules/${id}`, { method: "DELETE" });
-    if (!res.ok) { setMessage("Delete failed"); return; }
-    load();
+  async function togglePublish(m: Module) {
+    const res = await fetch(`/api/admin/modules/${m.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({published:!m.published})});
+    if (!res.ok) { showToast("Update failed",false); return; }
+    showToast(m.published?"Module unpublished":"Module published"); load();
   }
 
-  function startEdit(m: Module) {
-    setEditingId(m.id);
-    setETitle(m.title);
-    setEDescription(m.description || "");
-    setEYouTubeId(m.youtubeId);
-    setEOrder(m.order);
+  async function confirmDelete() {
+    if (!deleteTarget) return; setDeleteBusy(true);
+    try {
+      const res = await fetch(`/api/admin/modules/${deleteTarget.id}`,{method:"DELETE"});
+      if (!res.ok) { showToast("Delete failed",false); return; }
+      showToast("Module deleted"); setDeleteTarget(null); load();
+    } finally { setDeleteBusy(false); }
   }
-  async function saveEdit() {
-    if (!editingId) return;
-    await update(editingId, { title: eTitle, description: eDescription, youtubeId: eYouTubeId, order: eOrder });
-    setEditingId(null);
+
+  async function onRowDrop(toIdx: number) {
+    if (dragIdx==null||dragIdx===toIdx) return;
+    const arr=[...mods]; const [item]=arr.splice(dragIdx,1); arr.splice(toIdx,0,item);
+    const updated=arr.map((m,i)=>({...m,order:i+1})); setMods(updated); setDragIdx(null);
+    const res=await fetch("/api/admin/modules/reorder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:updated.map(m=>({id:m.id,order:m.order}))})});
+    if (!res.ok) { showToast("Failed to save order",false); load(); } else showToast("Order saved");
   }
 
   return (
-    <main>
-      <h1 className="text-2xl font-semibold mb-4 text-[color:var(--color-brand)]">Modules</h1>
-      {message && <p className="mb-3 text-sm rounded border border-red-300 bg-red-50 text-red-900 px-3 py-2">{message}</p>}
+    <>
+    <main className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-[color:var(--color-brand)]">Modules</h1>
+        <button onClick={()=>setCreateOpen(true)} className="flex items-center gap-1.5 rounded-lg bg-[color:var(--color-brand)] text-white px-4 py-2 text-sm font-medium hover:opacity-90">
+          <Plus className="w-4 h-4"/> Add Module
+        </button>
+      </div>
 
-      <section className="rounded border border-slate-200 bg-white p-4 shadow-[var(--shadow-card)] mb-4">
-        <h3 className="font-semibold mb-2">Create Module</h3>
-        <form onSubmit={create} className="grid gap-3 max-w-[520px]">
-          <input className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-brand)]" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} required />
-          <textarea className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-brand)]" placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
-          <input className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-brand)]" placeholder="YouTube ID or URL" value={youtubeId} onChange={(e) => setYouTubeId(e.target.value)} required />
-          <input className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-brand)]" placeholder="Order (optional)" value={order} onChange={(e) => setOrder(e.target.value === '' ? '' : Number(e.target.value))} />
-          <label className="flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} /> Published
-          </label>
-          <button type="submit" className="rounded bg-[color:var(--color-brand)] text-white px-3 py-2 text-sm hover:opacity-95">Create</button>
-        </form>
-      </section>
+      <div className="grid grid-cols-3 gap-3">
+        {[["Total",mods.length,"bg-blue-50","text-blue-600"],["Published",totalPub,"bg-emerald-50","text-emerald-600"],["Unpublished",totalUnpub,"bg-slate-50","text-slate-500"]].map(([label,value,bg,tc])=>(
+          <div key={label as string} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm flex items-center gap-3">
+            <div className={`rounded-lg p-2 ${bg as string}`}><BookOpen className={`w-5 h-5 ${tc as string}`}/></div>
+            <div><p className="text-2xl font-bold text-slate-800">{value as number}</p><p className="text-xs text-slate-500">{label as string}</p></div>
+          </div>
+        ))}
+      </div>
 
-      <h3 className="font-semibold mb-2">All Modules</h3>
-      {loading ? (
-        <div>Loading…</div>
-      ) : (
-        <div className="overflow-x-auto rounded border border-slate-200 bg-white shadow-[var(--shadow-card)]">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <th className="text-left border-b border-slate-200 px-2 py-2 text-sm font-semibold">Order</th>
-                <th className="text-left border-b border-slate-200 px-2 py-2 text-sm font-semibold">Title</th>
-                <th className="text-left border-b border-slate-200 px-2 py-2 text-sm font-semibold">Description</th>
-                <th className="text-left border-b border-slate-200 px-2 py-2 text-sm font-semibold">YouTube</th>
-                <th className="text-left border-b border-slate-200 px-2 py-2 text-sm font-semibold">Published</th>
-                <th className="text-left border-b border-slate-200 px-2 py-2 text-sm font-semibold">Actions</th>
-              </tr>
-            </thead>
+      <div className="flex flex-wrap items-center gap-2">
+        <input className="flex-1 min-w-[180px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-brand)]" placeholder="Search by title or description…" value={search} onChange={e=>setSearch(e.target.value)}/>
+        <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm" value={pubFilter} onChange={e=>setPubFilter(e.target.value as any)}>
+          <option value="ALL">All</option><option value="PUBLISHED">Published</option><option value="UNPUBLISHED">Unpublished</option>
+        </select>
+      </div>
+
+      {loading?<div className="flex items-center gap-2 text-slate-400 py-8"><Loader2 className="w-5 h-5 animate-spin"/>Loading…</div>:(
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full border-collapse text-sm">
+            <thead><tr className="bg-slate-50 border-b border-slate-200">
+              <th className="px-3 py-3 w-8"></th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-600">#</th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-600">Title</th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-600 hidden md:table-cell">Description</th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-600 hidden lg:table-cell">YouTube</th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-600">Status</th>
+              <th className="text-right px-4 py-3 font-semibold text-slate-600">Actions</th>
+            </tr></thead>
             <tbody>
-              {mods.map((m) => (
-                <tr key={m.id}>
-                  <td className="px-2 py-2 border-b border-slate-100">
-                    {editingId === m.id ? (
-                      <span className="text-slate-500 text-sm italic">Edit below ↓</span>
-                    ) : (
-                      m.order
-                    )}
+              {filtered.length===0&&<tr><td colSpan={7} className="text-center py-10 text-slate-400">No modules match your filters.</td></tr>}
+              {filtered.map(m=>(
+                <tr key={m.id} draggable onDragStart={()=>setDragIdx(mods.indexOf(m))} onDragOver={e=>e.preventDefault()} onDrop={()=>onRowDrop(mods.indexOf(m))} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors">
+                  <td className="px-3 py-3 cursor-grab text-slate-300 hover:text-slate-500"><GripVertical className="w-4 h-4"/></td>
+                  <td className="px-4 py-3 text-slate-500">{m.order}</td>
+                  <td className="px-4 py-3 font-medium text-slate-800">{m.title}</td>
+                  <td className="px-4 py-3 hidden md:table-cell text-slate-500 max-w-xs"><span className="line-clamp-1">{m.description||<span className="italic text-slate-300">No description</span>}</span></td>
+                  <td className="px-4 py-3 hidden lg:table-cell text-slate-500 font-mono text-xs">{m.youtubeId}</td>
+                  <td className="px-4 py-3">
+                    {m.published?<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">Published</span>
+                                :<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">Unpublished</span>}
                   </td>
-                  <td className="px-2 py-2 border-b border-slate-100">
-                    {editingId === m.id ? (
-                      <span className="text-slate-500 text-sm italic">Edit below ↓</span>
-                    ) : (
-                      m.title
-                    )}
-                  </td>
-                  <td className="px-2 py-2 border-b border-slate-100 max-w-xs">
-                    {editingId === m.id ? (
-                      <span className="text-slate-500 text-sm italic">Edit below ↓</span>
-                    ) : (
-                      <span className="text-sm text-slate-600 line-clamp-2" title={m.description || ""}>{m.description || <span className="text-slate-400 italic">No description</span>}</span>
-                    )}
-                  </td>
-                  <td className="px-2 py-2 border-b border-slate-100">
-                    {editingId === m.id ? (
-                      <span className="text-slate-500 text-sm italic">Edit below ↓</span>
-                    ) : (
-                      m.youtubeId
-                    )}
-                  </td>
-                  <td className="px-2 py-2 border-b border-slate-100">{m.published ? "Yes" : "No"}</td>
-                  <td className="px-2 py-2 border-b border-slate-100">
-                    {editingId === m.id ? (
-                      <div className="flex gap-2">
-                        <button className="rounded bg-[color:var(--color-brand)] text-white px-3 py-1.5 text-sm hover:opacity-95" onClick={saveEdit}>Save</button>
-                        <button className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50" onClick={() => setEditingId(null)}>Cancel</button>
-                      </div>
-                    ) : (
-                      <div className="flex gap-2">
-                        <button className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50" onClick={() => startEdit(m)}>Edit</button>
-                        <button className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50" onClick={() => update(m.id, { published: !m.published })}>{m.published ? "Unpublish" : "Publish"}</button>
-                        <button className="rounded bg-red-600 text-white px-3 py-1.5 text-sm hover:bg-red-500" onClick={() => remove(m.id)}>Delete</button>
-                      </div>
-                    )}
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button title={m.published?"Unpublish":"Publish"} onClick={()=>togglePublish(m)} className="rounded p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-700">
+                        {m.published?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}
+                      </button>
+                      <button title="Edit" onClick={()=>openEdit(m)} className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"><Pencil className="w-4 h-4"/></button>
+                      <button title="Delete" onClick={()=>setDeleteTarget(m)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -149,35 +162,78 @@ export default function AdminModules() {
           </table>
         </div>
       )}
-
-      {editingId != null && (
-        <section className="rounded border-2 border-blue-300 bg-blue-50 p-4 shadow-[var(--shadow-card)] mt-4">
-          <h3 className="font-semibold mb-3 text-blue-900">Editing: {mods.find(m => m.id === editingId)?.title}</h3>
-          <div className="grid gap-3 max-w-[720px] bg-white p-4 rounded border border-slate-200">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Title</label>
-              <input value={eTitle} onChange={(e) => setETitle(e.target.value)} className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-brand)]" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-              <textarea value={eDescription} onChange={(e) => setEDescription(e.target.value)} className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-brand)]" rows={4} placeholder="Enter module description..." />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">YouTube ID or URL</label>
-              <input value={eYouTubeId} onChange={(e) => setEYouTubeId(e.target.value)} className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-brand)]" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Order</label>
-              <input type="number" value={eOrder} onChange={(e) => setEOrder(Number(e.target.value))} className="w-32 rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-brand)]" />
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button className="rounded bg-[color:var(--color-brand)] text-white px-4 py-2 text-sm hover:opacity-95 font-medium" onClick={saveEdit}>Save Changes</button>
-              <button className="rounded border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50" onClick={() => setEditingId(null)}>Cancel</button>
-            </div>
-          </div>
-        </section>
-      )}
     </main>
+
+    {createOpen&&(
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={()=>setCreateOpen(false)}>
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg" onClick={e=>e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
+            <p className="font-semibold text-slate-800">Create Module</p>
+            <button onClick={()=>setCreateOpen(false)} className="p-1.5 rounded hover:bg-slate-100 text-slate-500"><X className="w-5 h-5"/></button>
+          </div>
+          <form onSubmit={submitCreate} className="p-5 space-y-3">
+            <div><label className="text-xs font-medium text-slate-600 mb-1 block">Title <span className="text-red-500">*</span></label><input className={INPUT} value={cTitle} onChange={e=>setCTitle(e.target.value)} required/></div>
+            <div><label className="text-xs font-medium text-slate-600 mb-1 block">Description</label><textarea className={INPUT} rows={3} value={cDesc} onChange={e=>setCDesc(e.target.value)}/></div>
+            <div><label className="text-xs font-medium text-slate-600 mb-1 block">YouTube ID or URL <span className="text-red-500">*</span></label><input className={INPUT} value={cYt} onChange={e=>setCYt(e.target.value)} required/></div>
+            <div className="flex items-center gap-3">
+              <div className="flex-1"><label className="text-xs font-medium text-slate-600 mb-1 block">Order (optional)</label><input className={INPUT} type="number" value={cOrder} onChange={e=>setCOrder(e.target.value===""?"":(Number(e.target.value)))}/></div>
+              <label className="flex items-center gap-2 text-sm text-slate-700 mt-4"><input type="checkbox" checked={cPub} onChange={e=>setCPub(e.target.checked)}/> Published</label>
+            </div>
+            <button type="submit" disabled={createBusy} className="w-full rounded-lg bg-[color:var(--color-brand)] text-white py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+              {createBusy&&<Loader2 className="w-4 h-4 animate-spin"/>} Create Module
+            </button>
+          </form>
+        </div>
+      </div>
+    )}
+
+    {editTarget&&(
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={()=>setEditTarget(null)}>
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg" onClick={e=>e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
+            <p className="font-semibold text-slate-800">Edit Module</p>
+            <button onClick={()=>setEditTarget(null)} className="p-1.5 rounded hover:bg-slate-100 text-slate-500"><X className="w-5 h-5"/></button>
+          </div>
+          <form onSubmit={submitEdit} className="p-5 space-y-3">
+            <div><label className="text-xs font-medium text-slate-600 mb-1 block">Title <span className="text-red-500">*</span></label><input className={INPUT} value={eTitle} onChange={e=>setETitle(e.target.value)} required/></div>
+            <div><label className="text-xs font-medium text-slate-600 mb-1 block">Description</label><textarea className={INPUT} rows={3} value={eDesc} onChange={e=>setEDesc(e.target.value)}/></div>
+            <div><label className="text-xs font-medium text-slate-600 mb-1 block">YouTube ID or URL</label><input className={INPUT} value={eYt} onChange={e=>setEYt(e.target.value)}/></div>
+            <div className="flex items-center gap-3">
+              <div className="flex-1"><label className="text-xs font-medium text-slate-600 mb-1 block">Order</label><input className={INPUT} type="number" value={eOrder} onChange={e=>setEOrder(Number(e.target.value))}/></div>
+              <label className="flex items-center gap-2 text-sm text-slate-700 mt-4"><input type="checkbox" checked={ePub} onChange={e=>setEPub(e.target.checked)}/> Published</label>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button type="submit" disabled={editBusy} className="flex-1 rounded-lg bg-[color:var(--color-brand)] text-white py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+                {editBusy&&<Loader2 className="w-4 h-4 animate-spin"/>} Save Changes
+              </button>
+              <button type="button" onClick={()=>setEditTarget(null)} className="px-4 rounded-lg border border-slate-300 text-slate-600 py-2 text-sm hover:bg-slate-50">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+
+    {deleteTarget&&(
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={()=>setDeleteTarget(null)}>
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6" onClick={e=>e.stopPropagation()}>
+          <p className="font-semibold text-red-700 mb-1">Delete Module?</p>
+          <p className="text-sm text-slate-500 mb-5">This will permanently remove <strong>{deleteTarget.title}</strong> along with its quiz, questions, and attempts.</p>
+          <div className="flex gap-2">
+            <button onClick={confirmDelete} disabled={deleteBusy} className="flex-1 rounded-lg bg-red-600 text-white py-2 text-sm font-medium hover:bg-red-500 disabled:opacity-50 flex items-center justify-center gap-2">
+              {deleteBusy&&<Loader2 className="w-4 h-4 animate-spin"/>} Delete
+            </button>
+            <button onClick={()=>setDeleteTarget(null)} className="flex-1 rounded-lg border border-slate-300 text-slate-600 py-2 text-sm hover:bg-slate-50">Cancel</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {toast&&(
+      <div className={`fixed bottom-4 right-4 z-[100] flex items-center gap-2 rounded-lg px-4 py-3 text-sm text-white shadow-lg ${toast.ok?"bg-emerald-600":"bg-red-600"}`}>
+        {toast.msg}
+        <button onClick={()=>setToast(null)} className="ml-2 opacity-70 hover:opacity-100"><X className="w-4 h-4"/></button>
+      </div>
+    )}
+    </>
   );
 }
-

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -16,7 +16,7 @@ export async function GET() {
     module: { title: string; order: number };
   };
   const quizzes: QuizWithModule[] = await prisma.quiz.findMany({ include: { module: true }, orderBy: { module: { order: "asc" } } });
-  const rows = quizzes.map((q: any) => ({ id: q.id, moduleId: q.moduleId, moduleTitle: q.module.title, order: q.module.order, passScore: q.passScore }));
+  const rows = quizzes.map((q: any) => ({ id: q.id, moduleId: q.moduleId, moduleTitle: q.module.title, order: q.module.order, passScore: q.passScore, timeLimitSeconds: q.timeLimitSeconds }));
   return NextResponse.json({ quizzes: rows });
 }
 

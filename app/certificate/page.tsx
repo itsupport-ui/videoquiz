@@ -5,30 +5,21 @@ import Link from "next/link";
 import {
   Award, Download, Lock, ArrowLeft, FileText,
 } from "lucide-react";
+import { prisma } from "@/lib/prisma";
+import { isUserEligible, computeUserOverallScore } from "@/lib/quiz";
+import { generateCertificatePdf } from "@/lib/cert";
 
 export const dynamic = "force-dynamic";
 
 export default async function CertificatePage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
-  const res = await fetch(`/api/certificate`, { cache: "no-store" });
-  let data: any;
-  try {
-    data = await res.json();
-  } catch (e) {
-    return (
-      <main className="max-w-[500px] mx-auto p-4 md:p-6 animate-fade-in">
-        <div className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-white p-6 shadow-[var(--shadow-card)] text-center">
-          <div className="p-3 rounded-full bg-[var(--color-error-light)] w-14 h-14 flex items-center justify-center mx-auto mb-3">
-            <FileText className="w-7 h-7 text-[var(--color-error)]" />
-          </div>
-          <h1 className="text-lg font-bold text-[var(--color-brown)] mb-2" style={{ fontFamily: "var(--font-serif)" }}>Certificate</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mb-4">Failed to load certificate status. Please refresh.</p>
-          <Link href="/" className="btn btn-ghost text-sm">Back to Dashboard</Link>
-        </div>
-      </main>
-    );
-  }
+
+  const eligible = await isUserEligible(session.user.id);
+  const existing = await (prisma as any).certificate.findFirst({
+    where: { userId: session.user.id, mainModuleId: null },
+  });
+  const data = { eligible, url: existing && eligible ? `/api/certificate/download` : undefined };
 
   return (
     <main className="max-w-[500px] mx-auto p-4 md:p-6 animate-fade-in">
@@ -59,7 +50,24 @@ export default async function CertificatePage() {
           ) : data.eligible ? (
             <>
               <p className="text-sm text-[var(--color-text-muted)] mb-5">You have completed all modules. Generate your certificate now.</p>
-              <form action="/api/certificate" method="post">
+              <form action={async () => {
+                "use server";
+                const sess = await getServerSession(authOptions);
+                if (!sess) return;
+                const score = await computeUserOverallScore(sess.user.id);
+                const filePath = await generateCertificatePdf({
+                  userName: sess.user.name || "User",
+                  userEmail: sess.user.email || sess.user.id,
+                  overallScore: score,
+                  contextTitle: "All Main Modules Completed",
+                });
+                await (prisma as any).certificate.upsert({
+                  where: { userId_mainModuleId: { userId: sess.user.id, mainModuleId: null } },
+                  update: { filePath, totalScore: score, issuedAt: new Date() },
+                  create: { userId: sess.user.id, mainModuleId: null, filePath, totalScore: score },
+                });
+                redirect("/certificate");
+              }}>
                 <button type="submit" className="btn btn-accent inline-flex items-center gap-2">
                   <Award className="w-4 h-4" />
                   Generate Certificate

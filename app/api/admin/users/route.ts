@@ -11,8 +11,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== "ADMIN") return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-  type UserRow = { id: string; email: string; name: string | null; role: "ADMIN" | "EMPLOYEE"; disabledAt: Date | null };
-  const users: UserRow[] = await prisma.user.findMany({ orderBy: { createdAt: "desc" }, select: { id: true, email: true, name: true, role: true, disabledAt: true } });
+  type UserRow = { id: string; email: string; name: string | null; role: "ADMIN" | "EMPLOYEE"; disabledAt: Date | null; createdAt: Date };
+  const users: UserRow[] = await prisma.user.findMany({ orderBy: { createdAt: "desc" }, select: { id: true, email: true, name: true, role: true, disabledAt: true, createdAt: true } });
   const enriched = users.map((u: UserRow) => ({ ...u, ...getProfileMeta(u.id) }));
   return NextResponse.json({ users: enriched });
 }

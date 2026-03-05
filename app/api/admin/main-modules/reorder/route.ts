@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -15,8 +15,6 @@ export async function POST(req: Request) {
   const parsed = schema.safeParse(json);
   if (!parsed.success) return NextResponse.json({ message: "Invalid input" }, { status: 400 });
   const { items } = parsed.data;
-  for (const it of items) {
-    await (prisma as any).mainModule.update({ where: { id: it.id }, data: { orderIndex: it.orderIndex } });
-  }
+  await prisma.$transaction(items.map(it => (prisma as any).mainModule.update({ where: { id: it.id }, data: { orderIndex: it.orderIndex } })));
   return NextResponse.json({ ok: true });
 }
