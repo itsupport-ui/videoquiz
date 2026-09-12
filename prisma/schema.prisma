@@ -55,7 +55,7 @@ model Question {
   id            String   @id @default(cuid())
   quizId        String
   text          String
-  options       String[]
+  options       Json
   correctIndex  Int
   active        Boolean  @default(true)
   correctAnswer String?
