@@ -40,11 +40,12 @@ if ($LASTEXITCODE -eq 0) {
 
 # 3. Backup database
 Write-Host ""
-Write-Host "Step 3: Backing up PostgreSQL database..." -ForegroundColor Yellow
+Write-Host "Step 3: Backing up MySQL database..." -ForegroundColor Yellow
 $DB_BACKUP_FILE = "videoquiz_db_backup_$TIMESTAMP.sql"
 
 # Create backup on server first
-ssh -i $SSH_KEY $SERVER "pg_dump -U itsupport -d videoquiz -h localhost > /tmp/$DB_BACKUP_FILE"
+# Assumes MySQL credentials are configured server-side in ~/.my.cnf so no password is passed on the command line
+ssh -i $SSH_KEY $SERVER "mysqldump -u itsupport videoquiz > /tmp/$DB_BACKUP_FILE"
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Database dump created on server" -ForegroundColor Green
     
